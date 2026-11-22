@@ -1,13 +1,59 @@
-// Main application logic - v36 (115 cards + Empty difficulty ITEM/CHECK support)
+// Main application logic - v37 (Reload Persistence + Return to TOP) (115 cards + Empty difficulty ITEM/CHECK support)
 let scanning = false;
 let streamRef = null;
 let masterData = []; 
 let currentEventRecord = null; 
 let visitedPoints = []; 
+let screenLogs = [];
 let currentScannedAt = null; 
 
+function saveTrainingState(sessionId) {
+    if (!sessionId) return;
+    const state = {
+        session_id: sessionId,
+        visitedPoints: visitedPoints,
+        screenLogs: screenLogs
+    };
+    localStorage.setItem('disaster_training_state', JSON.stringify(state));
+}
+
+function restoreTrainingState(sessionId) {
+    if (!sessionId) return;
+    try {
+        const saved = JSON.parse(localStorage.getItem('disaster_training_state') || 'null');
+        if (saved && saved.session_id === sessionId) {
+            visitedPoints = Array.isArray(saved.visitedPoints) ? saved.visitedPoints : [];
+            screenLogs = Array.isArray(saved.screenLogs) ? saved.screenLogs : [];
+            renderSavedLogs();
+            console.log('Training state restored:', visitedPoints.length, 'points,', screenLogs.length, 'logs.');
+        }
+    } catch (e) {
+        console.error('Failed to restore state:', e);
+    }
+}
+
+function renderSavedLogs() {
+    const activityLog = document.getElementById('activityLog');
+    const foundItems = document.getElementById('foundItems');
+    if (activityLog) activityLog.innerHTML = '';
+    if (foundItems) foundItems.innerHTML = '';
+    // screenLogs is stored oldest-first, so prepend in order to show newest at top
+    screenLogs.forEach(item => {
+        if (activityLog) {
+            const li = document.createElement('li');
+            li.innerHTML = `<span>[${item.timeStr}]</span> <span style="color:var(--color-primary)">${item.record_type}</span>: ${item.name}`;
+            activityLog.prepend(li);
+        }
+        if (foundItems && item.record_type === 'ITEM') {
+            const li = document.createElement('li');
+            li.innerHTML = `<span>[${item.timeStr}]</span> ${item.name}`;
+            foundItems.prepend(li);
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("App.js v36 Loaded (115 cards + Full GAS Analytics).");
+    console.log("App.js v37 Loaded (115 cards + Full GAS Analytics).");
     const startForm = document.getElementById('startForm');
     if (startForm) {
         startForm.addEventListener('submit', (e) => {
@@ -27,6 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             
             localStorage.setItem('disaster_training_session', JSON.stringify(sessionData));
+            localStorage.removeItem('disaster_training_state');
             window.location.href = 'training.html';
         });
     }
@@ -36,6 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const session = JSON.parse(localStorage.getItem('disaster_training_session'));
     
     if (timeDisplay && session) {
+        restoreTrainingState(session.session_id);
         if (typeof Papa !== 'undefined') {
             Papa.parse('data/data.csv?v=' + new Date().getTime(), {
                 download: true,
@@ -319,6 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 height_zone: hzVal
             });
         }
+        saveTrainingState(session.session_id);
 
         const optsContainer = document.getElementById('modalOptions');
         optsContainer.innerHTML = '';
@@ -390,6 +439,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 height_zone: hzVal
             });
         }
+        saveTrainingState(session.session_id);
 
         const optsContainer = document.getElementById('modalOptions');
         optsContainer.innerHTML = '';
@@ -408,20 +458,26 @@ function addLogToScreen(record) {
     const foundItems = document.getElementById('foundItems');
     const timeStr = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     
+    let name = "";
+    if(record.record_type === 'EVENT') name = `${record.event_name} (${record.selected_option})`;
+    else if(record.record_type === 'ITEM') name = record.item_name || record.check_name;
+    else if(record.record_type === 'CHECK') name = record.check_name || record.item_name;
+
+    screenLogs.push({
+        timeStr: timeStr,
+        record_type: record.record_type,
+        name: name
+    });
+    
     if (activityLog) {
         const li = document.createElement('li');
-        let name = "";
-        if(record.record_type === 'EVENT') name = `${record.event_name} (${record.selected_option})`;
-        else if(record.record_type === 'ITEM') name = record.item_name || record.check_name;
-        else if(record.record_type === 'CHECK') name = record.check_name || record.item_name;
-        
         li.innerHTML = `<span>[${timeStr}]</span> <span style="color:var(--color-primary)">${record.record_type}</span>: ${name}`;
         activityLog.prepend(li);
     }
     
     if (foundItems && record.record_type === 'ITEM') {
         const li = document.createElement('li');
-        li.innerHTML = `<span>[${timeStr}]</span> ${record.item_name || record.check_name}`;
+        li.innerHTML = `<span>[${timeStr}]</span> ${name}`;
         foundItems.prepend(li);
     }
 }
@@ -598,6 +654,9 @@ window.showEndScreen = function() {
         <div style="margin-top: 15px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
             <button onclick="saveResultAsImage()" class="btn-primary" style="background:#4b78a8; min-height:40px; width:auto; padding:0 20px;">画像を保存</button>
             <button onclick="shareResultImage()" class="btn-primary" style="background:#64a887; min-height:40px; width:auto; padding:0 20px;">共有する</button>
+        </div>
+        <div style="margin-top: 10px; display:flex; justify-content:center;">
+            <button onclick="returnToTopPage()" class="btn-primary" style="background:#314b6b; min-height:40px; width:100%; max-width:260px;">最初のTOPページに戻る</button>
         </div>
     `;
     
@@ -791,4 +850,12 @@ window.shareResultImage = async function() {
             }
         });
     });
+};
+
+window.returnToTopPage = function() {
+    if (confirm('最初のTOPページに戻りますか？\n（※画像の保存や共有はお済みですか？）')) {
+        localStorage.removeItem('disaster_training_session');
+        localStorage.removeItem('disaster_training_state');
+        window.location.href = 'index.html';
+    }
 };
