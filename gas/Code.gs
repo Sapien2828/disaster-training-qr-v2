@@ -1,4 +1,13 @@
 function doPost(e) {
+  // 複数人が同時にアクセスしても書き込みが衝突しないよう排他制御（最大20秒待機）
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: 'error',
+      message: 'Server busy (lock timeout)'
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
   try {
     const data = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -86,11 +95,16 @@ function doPost(e) {
     else if (recordType === 'CHECK') targetSheetName = 'CHECK';
     appendToSheet(targetSheetName);
     
+    // 書き込みを確実に確定させてからロック解除
+    SpreadsheetApp.flush();
+    
     return ContentService.createTextOutput(JSON.stringify({status: 'success'}))
       .setMimeType(ContentService.MimeType.JSON);
       
   } catch(error) {
     return ContentService.createTextOutput(JSON.stringify({status: 'error', message: error.toString()}))
       .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
 }

@@ -1,4 +1,4 @@
-// Main application logic - v37 (Reload Persistence + Return to TOP) (115 cards + Empty difficulty ITEM/CHECK support)
+// Main application logic - v39 (ID-based State & ITEM/CHECK Isolation) (115 cards + Empty difficulty ITEM/CHECK support)
 let scanning = false;
 let streamRef = null;
 let masterData = []; 
@@ -7,28 +7,41 @@ let visitedPoints = [];
 let screenLogs = [];
 let currentScannedAt = null; 
 
-function saveTrainingState(sessionId) {
-    if (!sessionId) return;
+function getStateStorageKey(session) {
+    if (!session || !session.participant_id || !session.session_id) return null;
+    return `disaster_training_state_${session.participant_id}_${session.session_id}`;
+}
+
+function saveTrainingState(session) {
+    const key = getStateStorageKey(session);
+    if (!key) return;
     const state = {
-        session_id: sessionId,
+        session_id: session.session_id,
+        participant_id: session.participant_id,
         visitedPoints: visitedPoints,
         screenLogs: screenLogs
     };
-    localStorage.setItem('disaster_training_state', JSON.stringify(state));
+    localStorage.setItem(key, JSON.stringify(state));
 }
 
-function restoreTrainingState(sessionId) {
-    if (!sessionId) return;
+function restoreTrainingState(session) {
+    const key = getStateStorageKey(session);
+    if (!key) return;
     try {
-        const saved = JSON.parse(localStorage.getItem('disaster_training_state') || 'null');
-        if (saved && saved.session_id === sessionId) {
+        const saved = JSON.parse(localStorage.getItem(key) || 'null');
+        if (saved && saved.session_id === session.session_id && saved.participant_id === session.participant_id) {
             visitedPoints = Array.isArray(saved.visitedPoints) ? saved.visitedPoints : [];
             screenLogs = Array.isArray(saved.screenLogs) ? saved.screenLogs : [];
             renderSavedLogs();
-            console.log('Training state restored:', visitedPoints.length, 'points,', screenLogs.length, 'logs.');
+            console.log('Training state restored for ID:', session.participant_id, visitedPoints.length, 'points');
+        } else {
+            visitedPoints = [];
+            screenLogs = [];
         }
     } catch (e) {
         console.error('Failed to restore state:', e);
+        visitedPoints = [];
+        screenLogs = [];
     }
 }
 
@@ -53,7 +66,7 @@ function renderSavedLogs() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("App.js v37 Loaded (115 cards + Full GAS Analytics).");
+    console.log("App.js v39 Loaded (115 cards + Full GAS Analytics).");
     const startForm = document.getElementById('startForm');
     if (startForm) {
         startForm.addEventListener('submit', (e) => {
@@ -83,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const session = JSON.parse(localStorage.getItem('disaster_training_session'));
     
     if (timeDisplay && session) {
-        restoreTrainingState(session.session_id);
+        restoreTrainingState(session);
         if (typeof Papa !== 'undefined') {
             Papa.parse('data/data.csv?v=' + new Date().getTime(), {
                 download: true,
@@ -228,7 +241,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const rType = (matchedRecord.record_type || '').trim().toUpperCase();
             
             if (rType === 'ITEM' || rType === 'CHECK') {
-                const alreadyScanned = visitedPoints.some(p => p.card_no === matchedRecord.card_no && p.type === rType);
+                const targetCardNo = String(matchedRecord.card_no).trim().padStart(4, '0');
+                const alreadyScanned = visitedPoints.some(p =>
+                    p.participant_id === session.participant_id &&
+                    p.session_id === session.session_id &&
+                    String(p.card_no).trim().padStart(4, '0') === targetCardNo &&
+                    p.type === rType
+                );
                 if (alreadyScanned) {
                     const optsContainer = document.getElementById('modalOptions');
                     optsContainer.innerHTML = '';
@@ -359,7 +378,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (record.x_px && record.y_px) {
             visitedPoints.push({ 
-                card_no: record.card_no,
+                participant_id: session.participant_id,
+                session_id: session.session_id,
+                card_no: String(record.card_no).trim().padStart(4, '0'),
                 x: parseFloat(record.x_px), 
                 y: parseFloat(record.y_px), 
                 type: 'EVENT',
@@ -367,7 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 height_zone: hzVal
             });
         }
-        saveTrainingState(session.session_id);
+        saveTrainingState(session);
 
         const optsContainer = document.getElementById('modalOptions');
         optsContainer.innerHTML = '';
@@ -432,14 +453,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (record.x_px && record.y_px) {
             visitedPoints.push({ 
-                card_no: record.card_no,
+                participant_id: session.participant_id,
+                session_id: session.session_id,
+                card_no: String(record.card_no).trim().padStart(4, '0'),
                 x: parseFloat(record.x_px), 
                 y: parseFloat(record.y_px), 
                 type: type,
                 height_zone: hzVal
             });
         }
-        saveTrainingState(session.session_id);
+        saveTrainingState(session);
 
         const optsContainer = document.getElementById('modalOptions');
         optsContainer.innerHTML = '';
@@ -854,6 +877,9 @@ window.shareResultImage = async function() {
 
 window.returnToTopPage = function() {
     if (confirm('最初のTOPページに戻りますか？\n（※画像の保存や共有はお済みですか？）')) {
+        const session = JSON.parse(localStorage.getItem('disaster_training_session') || 'null');
+        const key = getStateStorageKey(session);
+        if (key) localStorage.removeItem(key);
         localStorage.removeItem('disaster_training_session');
         localStorage.removeItem('disaster_training_state');
         window.location.href = 'index.html';
