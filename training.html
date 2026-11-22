@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>訓練画面</title>
+    <link rel="stylesheet" href="css/style.css?v=36">
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+    <div id="timeDisplay" class="time-display">00:00:00</div>
+    <div id="timerDisplay" class="timer-display">経過: 0分0秒</div>
+    
+    <div class="camera-section">
+        <video id="video" playsinline hidden></video>
+        <canvas id="canvas" hidden></canvas>
+        <div id="qrGuide" class="qr-guide">QR読み取りガイド</div>
+    </div>
+    
+    <div class="controls-section" style="display:flex; flex-direction:column; gap:10px; padding: 10px;">
+        <div style="display:flex; gap:10px; justify-content:center;">
+            <button id="startCameraBtn" class="btn-primary" style="margin:0;">カメラ起動</button>
+            <button id="restartCameraBtn" class="btn-primary" style="margin:0; display:none; background-color: var(--color-border);">カメラ再起動</button>
+        </div>
+        
+        <div id="manualInputSection" style="display:flex; gap:10px; justify-content:center; align-items:center;">
+            <label for="manualCodeInput" style="margin:0; font-size:14px; white-space:nowrap;">手動入力:</label>
+            <input type="text" id="manualCodeInput" placeholder="例: 0001" style="width: 100px; padding:8px;" inputmode="numeric" pattern="[0-9]*">
+            <button id="manualCodeSubmitBtn" class="btn-primary" style="margin:0; min-height:40px; width:auto; padding:0 20px;">読込</button>
+        </div>
+        
+        <div style="text-align:right;">
+            <button onclick="window.showEndScreen()" style="background:none; border:none; color:rgba(255,255,255,0.4); font-size:12px; width:auto; min-height:auto; margin:0; padding:0; text-decoration:underline;">強制終了して結果を確認</button>
+        </div>
+    </div>
+
+    <div class="log-section">
+        <div class="log-left">
+            <h3>活動ログ</h3>
+            <ul id="activityLog"></ul>
+        </div>
+        <div class="log-right">
+            <h3>発見済みITEM</h3>
+            <ul id="foundItems"></ul>
+        </div>
+    </div>
+
+    <div id="modal" class="modal hidden">
+        <div class="modal-content" id="modalContentBox">
+            <h2 id="modalTitle"></h2>
+            <div id="modalBody"></div>
+            <div id="modalOptions" class="modal-options"></div>
+        </div>
+    </div>
+
+    <script src="js/api.js?v=36"></script>
+    <script src="js/app.js?v=36"></script>
+</body>
+</html>
